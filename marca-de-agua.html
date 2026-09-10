@@ -1,0 +1,825 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sello — Marca de agua en lote</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+  :root{
+    --bg:#12181c;
+    --panel:#182126;
+    --panel-2:#1f2a30;
+    --ink:#dfe6e8;
+    --muted:#8fa1a8;
+    --border:#2c3a41;
+    --accent:#c99a53;
+    --accent-bright:#e8bd76;
+    --accent-ink:#1a1305;
+    --clay:#e8bd76;
+    --danger:#ff2b2b;
+    --paper:#f4efe4;
+    --radius:8px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;
+    background:radial-gradient(circle at 15% 10%, #1c262c 0%, var(--bg) 55%);
+    color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;}
+  .app{max-width:1280px;margin:0 auto;padding:28px 20px 60px;}
+
+  header.top{display:flex;align-items:baseline;justify-content:space-between;gap:16px;
+    margin-bottom:22px;border-bottom:1px solid var(--border);padding-bottom:14px;}
+  header.top .brand{display:flex;align-items:baseline;gap:10px;}
+  header.top .mark{width:30px;height:30px;border-radius:50%;
+    background:linear-gradient(180deg,var(--accent-bright),var(--accent));
+    display:inline-flex;align-items:center;justify-content:center;color:var(--accent-ink);font-weight:700;
+    font-size:14px;flex:none;}
+  header.top h1{font-size:22px;margin:0;font-weight:700;letter-spacing:-0.01em;
+    text-transform:uppercase;color:var(--ink);}
+  header.top p{margin:0;color:var(--muted);font-size:13px;max-width:360px;text-align:right;}
+
+  .layout{display:grid;grid-template-columns:340px 1fr;gap:20px;align-items:start;}
+  @media (max-width:880px){.layout{grid-template-columns:1fr;}}
+
+  .panel{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);
+    padding:18px;}
+  .panel + .panel{margin-top:16px;}
+  .panel h2{font-size:11px;text-transform:uppercase;letter-spacing:.09em;color:var(--accent-bright);
+    margin:0 0 14px;font-weight:600;}
+
+  #positionPanel, #configPanel{padding:0;overflow:hidden;}
+  #positionDetails summary, #configDetails summary{font-size:11px;text-transform:uppercase;letter-spacing:.09em;
+    color:var(--accent-bright);font-weight:600;padding:18px;cursor:pointer;list-style:none;
+    display:flex;align-items:center;justify-content:space-between;user-select:none;}
+  #positionDetails summary::-webkit-details-marker, #configDetails summary::-webkit-details-marker{display:none;}
+  #positionDetails summary .chev, #configDetails summary .chev{font-size:11px;color:var(--muted);transition:transform .15s ease;}
+  #positionDetails[open] summary .chev, #configDetails[open] summary .chev{transform:rotate(90deg);}
+  #positionDetails[open] summary, #configDetails[open] summary{border-bottom:1px solid var(--border);}
+  #positionDetails .details-body, #configDetails .details-body{padding:16px 18px 18px;}
+
+  .drop{border:1.5px dashed var(--border);border-radius:8px;padding:18px 12px;text-align:center;
+    cursor:pointer;transition:border-color .15s, background .15s;background:var(--panel-2);}
+  .drop:hover, .drop.drag{border-color:var(--accent);background:#1a1305;}
+  .drop .big{font-size:13px;font-weight:600;color:var(--ink);}
+  .drop .small{font-size:11.5px;color:var(--muted);margin-top:4px;}
+  input[type=file]{display:none;}
+
+  .thumbs{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;}
+  .thumb{width:52px;height:52px;border-radius:6px;overflow:hidden;position:relative;
+    border:2px solid transparent;cursor:pointer;background:var(--panel-2);flex:none;}
+  .thumb.active{border-color:var(--accent);}
+  .thumb img{width:100%;height:100%;object-fit:cover;display:block;}
+  .thumb .x{position:absolute;top:0;right:0;background:rgba(0,0,0,.65);color:var(--danger);
+    width:16px;height:16px;font-size:11px;line-height:16px;text-align:center;cursor:pointer;}
+  .count-badge{display:inline-block;background:var(--panel-2);border:1px solid var(--border);
+    color:var(--accent-bright);font-size:11px;
+    border-radius:20px;padding:2px 8px;margin-left:6px;font-weight:600;}
+
+  label{display:block;font-size:12px;font-weight:400;margin:14px 0 6px;color:var(--muted);}
+  label:first-child{margin-top:0;}
+  label .val{float:right;font-weight:600;color:var(--accent-bright);font-variant-numeric:tabular-nums;}
+  input[type=text], select{width:100%;padding:8px 9px;border:1px solid var(--border);
+    border-radius:6px;font-size:13.5px;font-family:inherit;background:#0f1519;color:var(--ink);}
+  input[type=range]{width:100%;accent-color:var(--accent);}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+
+  .color-row{display:flex;gap:8px;align-items:center;}
+  .color-row input[type=color]{width:36px;height:34px;border:1px solid var(--border);
+    border-radius:6px;padding:2px;background:#0f1519;cursor:pointer;}
+  .color-row input[type=text]{flex:1;}
+
+  .toggle-group{display:flex;gap:6px;}
+  .toggle-group button{flex:1;padding:7px 4px;font-size:12px;border:1px solid var(--border);
+    background:#0f1519;border-radius:6px;cursor:pointer;color:var(--text-dim,var(--muted));font-weight:600;}
+  .toggle-group button.active{background:#1a1305;color:var(--accent-bright);border-color:var(--accent);}
+
+  .grid9{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:8px;}
+  .grid9 button{aspect-ratio:1;border:1px solid var(--border);background:#0f1519;border-radius:5px;
+    cursor:pointer;display:flex;align-items:center;justify-content:center;}
+  .grid9 button::after{content:"";width:7px;height:7px;border-radius:50%;background:var(--border);}
+  .grid9 button:hover::after{background:var(--accent-bright);}
+
+  .checkline{display:flex;align-items:center;gap:8px;margin:14px 0 0;font-size:13px;font-weight:600;
+    color:var(--ink);}
+  .checkline input{accent-color:var(--accent);width:15px;height:15px;}
+
+  /* preview */
+  .stage{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);
+    padding:18px;min-height:420px;display:flex;flex-direction:column;}
+  .stage-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;}
+  .stage-head h2{font-size:11px;text-transform:uppercase;letter-spacing:.09em;color:var(--accent-bright);
+    margin:0;font-weight:600;}
+  .stage-hint{font-size:11.5px;color:var(--muted);}
+  .canvas-wrap{position:relative;flex:1;display:flex;align-items:center;justify-content:center;
+    background:
+      repeating-linear-gradient(0deg, #0d1215 0 1px, transparent 1px 28px),
+      repeating-linear-gradient(90deg, #0d1215 0 1px, transparent 1px 28px),
+      var(--bg);
+    border:1px solid var(--border);
+    border-radius:8px;overflow:hidden;min-height:360px;touch-action:none;}
+  #previewCanvas{max-width:100%;max-height:60vh;display:block;box-shadow:0 2px 20px rgba(0,0,0,.5);}
+  .drag-handle{position:absolute;border:1.5px dashed var(--accent-bright);border-radius:4px;
+    cursor:grab;background:rgba(232,189,118,0.08);align-items:center;justify-content:center;
+    display:none;z-index:4;}
+  .drag-handle:active{cursor:grabbing;}
+  .drag-handle-logo{border-color:var(--accent-bright);background:rgba(232,189,118,0.10);}
+  .drag-handle-text{border-color:var(--danger);background:rgba(255,43,43,0.08);}
+  .handle-label{font-size:9.5px;font-weight:700;letter-spacing:.06em;color:var(--ink);
+    background:rgba(15,21,25,.85);padding:2px 6px;border-radius:3px;pointer-events:none;
+    text-transform:uppercase;white-space:nowrap;}
+  .drag-handle-logo .handle-label{color:var(--accent-bright);}
+  .drag-handle-text .handle-label{color:var(--danger);}
+  .empty-state{color:var(--muted);font-size:13.5px;text-align:center;padding:40px 20px;}
+
+  .actions{display:flex;gap:10px;margin-top:16px;flex-wrap:wrap;}
+  button.primary{background:linear-gradient(180deg,var(--accent-bright),var(--accent));
+    color:var(--accent-ink);border:none;padding:12px 20px;
+    border-radius:7px;font-size:13px;font-weight:700;cursor:pointer;
+    text-transform:uppercase;letter-spacing:.04em;}
+  button.primary:hover{filter:brightness(1.08);}
+  button.primary:disabled{opacity:.35;cursor:not-allowed;filter:none;}
+  button.ghost{background:transparent;color:var(--ink);border:1px solid var(--border);
+    padding:12px 16px;border-radius:7px;font-size:13px;font-weight:600;cursor:pointer;}
+  button.ghost:hover{border-color:var(--accent);color:var(--accent-bright);}
+  .progress{font-size:12.5px;color:var(--muted);align-self:center;}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="layout">
+
+    <!-- CONTROLS -->
+    <div class="controls">
+
+      <div class="panel">
+        <h2>1. Fotos<span class="count-badge" id="imgCount">0</span></h2>
+        <div class="drop" id="dropImages">
+          <div class="big">Arrastra tus fotos aquí</div>
+          <div class="small">o haz clic para elegir (puedes seleccionar varias)</div>
+        </div>
+        <input type="file" id="imgInput" accept="image/*" multiple>
+        <div class="thumbs" id="thumbs"></div>
+      </div>
+
+      <div class="panel">
+        <h2>2. Tipo de marca</h2>
+        <div class="toggle-group">
+          <button data-mode="text" class="active" id="modeTextBtn">Texto</button>
+          <button data-mode="logo" id="modeLogoBtn">Logo (imagen)</button>
+          <button data-mode="both" id="modeBothBtn">Ambos</button>
+        </div>
+
+        <div id="textControls">
+          <label>Texto</label>
+          <input type="text" id="wmText" value="@ampilaser" placeholder="Ej: © Tu Pyme 2026">
+
+          <label>Color <span class="val" id="colorVal">#FFFFFF</span></label>
+          <div class="color-row">
+            <input type="color" id="wmColorPicker" value="#ffffff">
+            <input type="text" id="wmColorHex" value="#FFFFFF">
+          </div>
+
+          <label>Tamaño de letra <span class="val" id="fontSizeVal">36px</span></label>
+          <input type="range" id="fontSize" min="10" max="140" value="36">
+
+          <label>Tipografía</label>
+          <select id="fontFamily">
+            <option value="Arial, sans-serif">Sans (Arial)</option>
+            <option value="Georgia, serif">Serif (Georgia)</option>
+            <option value="'Courier New', monospace">Monoespaciada</option>
+            <option value="Impact, sans-serif">Impact (gruesa)</option>
+          </select>
+        </div>
+
+        <div id="logoControls" style="display:none;">
+          <label>Imagen del logo (PNG con fondo transparente ideal)</label>
+          <div class="drop" id="dropLogo" style="padding:12px;">
+            <div class="big" style="font-size:12.5px;">Subir logo</div>
+          </div>
+          <input type="file" id="logoInput" accept="image/*">
+          <img id="logoPreviewThumb" style="max-width:60px;max-height:60px;margin-top:8px;display:none;">
+          <button type="button" class="ghost" id="removeLogoBtn"
+            style="display:none;margin-top:8px;padding:6px 10px;font-size:11.5px;">Quitar logo guardado</button>
+          <span class="progress" id="logoStorageStatus" style="display:block;margin-top:6px;"></span>
+
+          <label>Tamaño del logo <span class="val" id="logoScaleVal">100%</span></label>
+          <input type="range" id="logoScale" min="5" max="200" value="30">
+        </div>
+      </div>
+
+      <div class="panel" id="positionPanel">
+        <details id="positionDetails">
+          <summary>4. Posición <span class="chev">▸</span></summary>
+          <div class="details-body">
+            <div class="toggle-group" id="dragTargetToggle" style="display:none;margin-bottom:10px;">
+              <button data-target="logo" class="active">Mover logo</button>
+              <button data-target="text">Mover texto</button>
+            </div>
+            <div class="grid9" id="grid9"></div>
+            <p class="small" style="color:var(--muted);font-size:11.5px;margin-top:10px;">
+              Arrastra <b style="color:var(--accent-bright);">directamente sobre la foto</b> el logo o el texto
+              — cada uno se mueve por separado. La posición se guarda
+              <b style="color:var(--accent-bright);">por cada foto</b>.
+            </p>
+          </div>
+        </details>
+      </div>
+
+    </div>
+
+    <!-- PREVIEW -->
+    <div class="stage">
+      <div class="stage-head">
+        <h2>Vista previa</h2>
+        <span class="stage-hint" id="stageHint"></span>
+      </div>
+      <div class="canvas-wrap" id="canvasWrap">
+        <div class="empty-state" id="emptyState">Sube al menos una foto para empezar</div>
+        <canvas id="previewCanvas" style="display:none;"></canvas>
+      </div>
+
+      <div class="actions">
+        <button class="primary" id="downloadAllBtn" disabled>Aplicar a todas y descargar .zip</button>
+        <button class="ghost" id="downloadAllSeparateBtn" disabled>Descargar todas (sin comprimir)</button>
+        <button class="ghost" id="downloadOneBtn" disabled>Descargar solo esta foto</button>
+        <span class="progress" id="progressText"></span>
+      </div>
+
+      <div class="panel" style="margin-top:16px;">
+        <h2>3. Transparencia y ángulo</h2>
+        <label>Opacidad <span class="val" id="opacityVal">85%</span></label>
+        <input type="range" id="opacity" min="2" max="100" value="85">
+
+        <label>Rotación <span class="val" id="rotationVal">0°</span></label>
+        <input type="range" id="rotation" min="-45" max="45" value="0">
+
+        <div class="checkline">
+          <input type="checkbox" id="mosaicToggle">
+          <label style="margin:0;" for="mosaicToggle">Repetir en mosaico (cubre toda la foto — máxima protección anti-robo)</label>
+        </div>
+      </div>
+
+      <div class="panel" id="configPanel" style="margin-top:16px;">
+        <details id="configDetails">
+          <summary>5. Configuración <span class="chev">▸</span></summary>
+          <div class="details-body">
+            <p style="color:var(--muted);font-size:11.5px;margin:0 0 10px;">
+              Guarda el texto, color, tamaño, opacidad y demás ajustes para reutilizarlos después
+              (no incluye las posiciones de cada foto ni el logo).
+            </p>
+            <div class="actions" style="margin-top:0;">
+              <button class="ghost" id="saveConfigBtn" style="flex:1;">Guardar configuración</button>
+              <button class="ghost" id="loadConfigBtn" style="flex:1;">Cargar configuración</button>
+            </div>
+            <input type="file" id="configInput" accept="application/json">
+            <span class="progress" id="configStatus" style="display:block;margin-top:8px;"></span>
+          </div>
+        </details>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+(function(){
+  // ---------- state ----------
+  const state = {
+    images: [],      // {file, img, name}
+    activeIndex: -1,
+    mode: 'text',     // text | logo | both
+    text: '@ampilaser',
+    color: '#ffffff',
+    fontSize: 36,
+    fontFamily: 'Arial, sans-serif',
+    logoImg: null,
+    logoScale: 30,    // % of image width
+    opacity: 85,
+    rotation: 0,
+    mosaic: false,
+    defaultLogoPos: { x: 0.82, y: 0.82 },
+    defaultTextPos: { x: 0.82, y: 0.94 },
+    dragTarget: 'logo', // qué se mueve al arrastrar / usar el grid9 cuando el modo es 'both'
+  };
+
+  // ---------- elements ----------
+  const el = id => document.getElementById(id);
+  const dropImages = el('dropImages');
+  const imgInput = el('imgInput');
+  const thumbs = el('thumbs');
+  const imgCount = el('imgCount');
+  const canvas = el('previewCanvas');
+  const ctx = canvas.getContext('2d');
+  const canvasWrap = el('canvasWrap');
+  const emptyState = el('emptyState');
+  const downloadAllBtn = el('downloadAllBtn');
+  const downloadAllSeparateBtn = el('downloadAllSeparateBtn');
+  const downloadOneBtn = el('downloadOneBtn');
+  const progressText = el('progressText');
+  const stageHint = el('stageHint');
+
+  // ---------- image upload ----------
+  dropImages.addEventListener('click', () => imgInput.click());
+  ['dragenter','dragover'].forEach(evt=>dropImages.addEventListener(evt,e=>{e.preventDefault();dropImages.classList.add('drag');}));
+  ['dragleave','drop'].forEach(evt=>dropImages.addEventListener(evt,e=>{e.preventDefault();dropImages.classList.remove('drag');}));
+  dropImages.addEventListener('drop', e => handleFiles(e.dataTransfer.files));
+  imgInput.addEventListener('change', e => handleFiles(e.target.files));
+
+  function handleFiles(fileList){
+    const files = Array.from(fileList).filter(f => f.type.startsWith('image/'));
+    let loaded = 0;
+    files.forEach(file => {
+      const reader = new FileReader();
+      reader.onload = e => {
+        const img = new Image();
+        img.onload = () => {
+          state.images.push({file, img, name: file.name,
+            posLogo: { ...state.defaultLogoPos },
+            posText: { ...state.defaultTextPos }});
+          if(state.activeIndex === -1) state.activeIndex = 0;
+          renderThumbs();
+          renderPreview();
+          updateButtons();
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function renderThumbs(){
+    thumbs.innerHTML = '';
+    state.images.forEach((item, i) => {
+      const div = document.createElement('div');
+      div.className = 'thumb' + (i === state.activeIndex ? ' active' : '');
+      div.innerHTML = `<img src="${item.img.src}"><span class="x">✕</span>`;
+      div.querySelector('img').addEventListener('click', () => { state.activeIndex = i; renderThumbs(); renderPreview(); });
+      div.querySelector('.x').addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        state.images.splice(i,1);
+        if(state.activeIndex >= state.images.length) state.activeIndex = state.images.length - 1;
+        renderThumbs(); renderPreview(); updateButtons();
+      });
+      thumbs.appendChild(div);
+    });
+    imgCount.textContent = state.images.length;
+  }
+
+  function updateButtons(){
+    const has = state.images.length > 0;
+    downloadAllBtn.disabled = !has;
+    downloadAllSeparateBtn.disabled = !has;
+    downloadOneBtn.disabled = !has;
+    emptyState.style.display = has ? 'none' : 'block';
+    canvas.style.display = has ? 'block' : 'none';
+  }
+
+  // ---------- mode toggle ----------
+  const modeBtns = { text: el('modeTextBtn'), logo: el('modeLogoBtn'), both: el('modeBothBtn') };
+  Object.entries(modeBtns).forEach(([m, btn]) => btn.addEventListener('click', () => {
+    state.mode = m;
+    Object.values(modeBtns).forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    el('textControls').style.display = (m === 'logo') ? 'none' : 'block';
+    el('logoControls').style.display = (m === 'text') ? 'none' : 'block';
+    el('dragTargetToggle').style.display = (m === 'both') ? 'flex' : 'none';
+    state.dragTarget = (m === 'text') ? 'text' : (m === 'logo' ? 'logo' : state.dragTarget);
+    renderPreview();
+  }));
+
+  const dragTargetBtns = document.querySelectorAll('#dragTargetToggle button');
+  dragTargetBtns.forEach(btn => btn.addEventListener('click', () => {
+    state.dragTarget = btn.dataset.target;
+    dragTargetBtns.forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    renderPreview();
+  }));
+
+  // ---------- logo upload ----------
+  const LOGO_STORAGE_KEY = 'sello_logo_dataurl';
+  const dropLogo = el('dropLogo');
+  const logoInput = el('logoInput');
+  dropLogo.addEventListener('click', () => logoInput.click());
+  logoInput.addEventListener('change', e => {
+    const file = e.target.files[0];
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const img = new Image();
+      img.onload = () => {
+        state.logoImg = img;
+        const thumb = el('logoPreviewThumb');
+        thumb.src = img.src;
+        thumb.style.display = 'inline-block';
+        el('removeLogoBtn').style.display = 'inline-block';
+        renderPreview();
+      };
+      img.src = ev.target.result;
+      saveLogoToStorage(ev.target.result);
+    };
+    reader.readAsDataURL(file);
+  });
+
+  function saveLogoToStorage(dataUrl){
+    try{
+      localStorage.setItem(LOGO_STORAGE_KEY, dataUrl);
+      el('logoStorageStatus').textContent = 'Logo guardado en este navegador — se abrirá solo la próxima vez ✓';
+      setTimeout(() => el('logoStorageStatus').textContent = '', 4000);
+    }catch(err){
+      el('logoStorageStatus').textContent = 'No se pudo guardar el logo (¿navegación privada o memoria llena?). Tendrás que subirlo de nuevo la próxima vez.';
+    }
+  }
+
+  el('removeLogoBtn').addEventListener('click', () => {
+    state.logoImg = null;
+    const thumb = el('logoPreviewThumb');
+    thumb.src = '';
+    thumb.style.display = 'none';
+    el('removeLogoBtn').style.display = 'none';
+    try{ localStorage.removeItem(LOGO_STORAGE_KEY); }catch(err){}
+    renderPreview();
+  });
+
+  (function loadSavedLogo(){
+    let saved = null;
+    try{ saved = localStorage.getItem(LOGO_STORAGE_KEY); }catch(err){ saved = null; }
+    if(saved){
+      const img = new Image();
+      img.onload = () => {
+        state.logoImg = img;
+        const thumb = el('logoPreviewThumb');
+        thumb.src = img.src;
+        thumb.style.display = 'inline-block';
+        el('removeLogoBtn').style.display = 'inline-block';
+        renderPreview();
+      };
+      img.src = saved;
+    }
+  })();
+
+  // ---------- text controls ----------
+  el('wmText').addEventListener('input', e => { state.text = e.target.value; renderPreview(); });
+  el('wmColorPicker').addEventListener('input', e => {
+    state.color = e.target.value;
+    el('wmColorHex').value = e.target.value.toUpperCase();
+    el('colorVal').textContent = e.target.value.toUpperCase();
+    renderPreview();
+  });
+  el('wmColorHex').addEventListener('input', e => {
+    let v = e.target.value.trim();
+    if(!v.startsWith('#')) v = '#' + v;
+    if(/^#[0-9A-Fa-f]{6}$/.test(v)){
+      state.color = v;
+      el('wmColorPicker').value = v;
+      el('colorVal').textContent = v.toUpperCase();
+      renderPreview();
+    }
+  });
+  el('fontSize').addEventListener('input', e => {
+    state.fontSize = +e.target.value;
+    el('fontSizeVal').textContent = state.fontSize + 'px';
+    renderPreview();
+  });
+  el('fontFamily').addEventListener('change', e => { state.fontFamily = e.target.value; renderPreview(); });
+  el('logoScale').addEventListener('input', e => {
+    state.logoScale = +e.target.value;
+    el('logoScaleVal').textContent = state.logoScale + '%';
+    renderPreview();
+  });
+
+  // ---------- opacity / rotation / mosaic ----------
+  el('opacity').addEventListener('input', e => {
+    state.opacity = +e.target.value;
+    el('opacityVal').textContent = state.opacity + '%';
+    renderPreview();
+  });
+  el('rotation').addEventListener('input', e => {
+    state.rotation = +e.target.value;
+    el('rotationVal').textContent = state.rotation + '°';
+    renderPreview();
+  });
+  el('mosaicToggle').addEventListener('change', e => {
+    state.mosaic = e.target.checked;
+    el('positionPanel').style.opacity = state.mosaic ? '0.4' : '1';
+    el('positionPanel').style.pointerEvents = state.mosaic ? 'none' : 'auto';
+    renderPreview();
+  });
+
+  // ---------- 9-grid position presets ----------
+  const positions = [
+    [0.14,0.10],[0.5,0.10],[0.86,0.10],
+    [0.14,0.5], [0.5,0.5], [0.86,0.5],
+    [0.14,0.90],[0.5,0.90],[0.86,0.90],
+  ];
+  const grid9 = el('grid9');
+
+  function activeTargetKey(){
+    if(state.mode === 'logo') return 'posLogo';
+    if(state.mode === 'text') return 'posText';
+    return state.dragTarget === 'text' ? 'posText' : 'posLogo';
+  }
+
+  positions.forEach(([x,y]) => {
+    const b = document.createElement('button');
+    b.addEventListener('click', () => {
+      if(state.activeIndex === -1) return;
+      state.images[state.activeIndex][activeTargetKey()] = { x, y };
+      renderPreview();
+    });
+    grid9.appendChild(b);
+  });
+
+  // ---------- drag handles over canvas (logo y texto, independientes) ----------
+  let draggingWhich = null; // 'logo' | 'text' | null
+  let handleLogoEl = null, handleTextEl = null;
+
+  function ensureHandles(){
+    if(handleLogoEl) handleLogoEl.remove();
+    if(handleTextEl) handleTextEl.remove();
+
+    handleLogoEl = document.createElement('div');
+    handleLogoEl.className = 'drag-handle drag-handle-logo';
+    handleLogoEl.title = 'Arrastra para mover el logo';
+    handleLogoEl.innerHTML = '';
+    canvasWrap.appendChild(handleLogoEl);
+    handleLogoEl.addEventListener('mousedown', e => startDrag(e,'logo'));
+    handleLogoEl.addEventListener('touchstart', e => startDrag(e,'logo'), {passive:false});
+
+    handleTextEl = document.createElement('div');
+    handleTextEl.className = 'drag-handle drag-handle-text';
+    handleTextEl.title = 'Arrastra para mover el texto';
+    handleTextEl.innerHTML = '';
+    canvasWrap.appendChild(handleTextEl);
+    handleTextEl.addEventListener('mousedown', e => startDrag(e,'text'));
+    handleTextEl.addEventListener('touchstart', e => startDrag(e,'text'), {passive:false});
+  }
+
+  function startDrag(e, which){
+    e.preventDefault();
+    e.stopPropagation();
+    draggingWhich = which;
+  }
+  window.addEventListener('mousemove', onDrag);
+  window.addEventListener('touchmove', onDrag, {passive:false});
+  window.addEventListener('mouseup', () => draggingWhich = null);
+  window.addEventListener('touchend', () => draggingWhich = null);
+
+  function onDrag(e){
+    if(!draggingWhich || state.mosaic || state.activeIndex === -1) return;
+    e.preventDefault();
+    const rect = canvas.getBoundingClientRect();
+    const point = e.touches ? e.touches[0] : e;
+    let x = (point.clientX - rect.left) / rect.width;
+    let y = (point.clientY - rect.top) / rect.height;
+    x = Math.min(1, Math.max(0, x));
+    y = Math.min(1, Math.max(0, y));
+    const key = draggingWhich === 'text' ? 'posText' : 'posLogo';
+    state.images[state.activeIndex][key] = { x, y };
+    renderPreview();
+  }
+
+  // ---------- core drawing ----------
+  function drawWatermark(targetCtx, cw, ch, posLogo, posText){
+    targetCtx.save();
+    targetCtx.globalAlpha = state.opacity / 100;
+
+    const drawLogoAt = (cx, cy) => {
+      if(!state.logoImg) return;
+      targetCtx.save();
+      targetCtx.translate(cx, cy);
+      targetCtx.rotate(state.rotation * Math.PI / 180);
+      const targetW = cw * (state.logoScale/100);
+      const ratio = state.logoImg.height / state.logoImg.width;
+      const targetH = targetW * ratio;
+      targetCtx.drawImage(state.logoImg, -targetW/2, -targetH/2, targetW, targetH);
+      targetCtx.restore();
+    };
+
+    const drawTextAt = (cx, cy) => {
+      targetCtx.save();
+      targetCtx.translate(cx, cy);
+      targetCtx.rotate(state.rotation * Math.PI / 180);
+      targetCtx.font = `700 ${state.fontSize}px ${state.fontFamily}`;
+      targetCtx.fillStyle = state.color;
+      targetCtx.textAlign = 'center';
+      targetCtx.textBaseline = 'middle';
+      targetCtx.fillText(state.text, 0, 0);
+      targetCtx.restore();
+    };
+
+    if(state.mosaic){
+      const stepX = Math.max(cw/4, 160);
+      const stepY = Math.max(ch/4, 140);
+      for(let y = -stepY; y < ch + stepY; y += stepY){
+        for(let x = -stepX; x < cw + stepX; x += stepX){
+          if(state.mode === 'logo' || state.mode === 'both') drawLogoAt(x, y);
+          if(state.mode === 'text' || state.mode === 'both') drawTextAt(x, y + (state.mode==='both' ? cw*(state.logoScale/100)/2 + state.fontSize*0.7 : 0));
+        }
+      }
+    } else {
+      if(state.mode === 'logo' || state.mode === 'both') drawLogoAt(cw*posLogo.x, ch*posLogo.y);
+      if(state.mode === 'text' || state.mode === 'both') drawTextAt(cw*posText.x, ch*posText.y);
+    }
+
+    targetCtx.restore();
+  }
+
+  function renderPreview(){
+    updateButtons();
+    if(state.activeIndex === -1 || !state.images[state.activeIndex]) return;
+    const { img } = state.images[state.activeIndex];
+
+    const maxW = 760, maxH = 560;
+    let w = img.width, h = img.height;
+    const scale = Math.min(maxW/w, maxH/h, 1);
+    w = Math.round(w*scale); h = Math.round(h*scale);
+    canvas.width = w; canvas.height = h;
+
+    const activeItem = state.images[state.activeIndex];
+    ctx.clearRect(0,0,w,h);
+    ctx.drawImage(img, 0, 0, w, h);
+    drawWatermark(ctx, w, h, activeItem.posLogo, activeItem.posText);
+
+    ensureHandles();
+    if(!state.mosaic){
+      const rect = canvas.getBoundingClientRect();
+      const wrapRect = canvasWrap.getBoundingClientRect();
+      const hSize = 64;
+
+      const showLogo = state.mode === 'logo' || state.mode === 'both';
+      const showText = state.mode === 'text' || state.mode === 'both';
+
+      handleLogoEl.style.display = showLogo ? 'flex' : 'none';
+      if(showLogo){
+        handleLogoEl.style.width = hSize + 'px';
+        handleLogoEl.style.height = (hSize/2) + 'px';
+        handleLogoEl.style.left = (rect.left - wrapRect.left + rect.width*activeItem.posLogo.x - hSize/2) + 'px';
+        handleLogoEl.style.top = (rect.top - wrapRect.top + rect.height*activeItem.posLogo.y - hSize/4) + 'px';
+      }
+
+      handleTextEl.style.display = showText ? 'flex' : 'none';
+      if(showText){
+        handleTextEl.style.width = hSize + 'px';
+        handleTextEl.style.height = (hSize/2) + 'px';
+        handleTextEl.style.left = (rect.left - wrapRect.left + rect.width*activeItem.posText.x - hSize/2) + 'px';
+        handleTextEl.style.top = (rect.top - wrapRect.top + rect.height*activeItem.posText.y - hSize/4) + 'px';
+      }
+    } else {
+      handleLogoEl.style.display = 'none';
+      handleTextEl.style.display = 'none';
+    }
+
+    stageHint.textContent = `${activeItem.name} — ${img.width}×${img.height}px`;
+  }
+
+  window.addEventListener('resize', renderPreview);
+
+  // ---------- export helpers ----------
+  function renderFull(imgItem){
+    const off = document.createElement('canvas');
+    off.width = imgItem.img.width;
+    off.height = imgItem.img.height;
+    const octx = off.getContext('2d');
+    octx.drawImage(imgItem.img, 0, 0);
+    drawWatermark(octx, off.width, off.height, imgItem.posLogo, imgItem.posText);
+    return off;
+  }
+
+  downloadOneBtn.addEventListener('click', () => {
+    if(state.activeIndex === -1) return;
+    const item = state.images[state.activeIndex];
+    const off = renderFull(item);
+    off.toBlob(blob => {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'marca-' + item.name.replace(/\.[^.]+$/, '') + '.jpg';
+      a.click();
+    }, 'image/jpeg', 0.9);
+  });
+
+  downloadAllBtn.addEventListener('click', async () => {
+    if(state.images.length === 0) return;
+    downloadAllBtn.disabled = true;
+    const zip = new JSZip();
+    for(let i=0;i<state.images.length;i++){
+      progressText.textContent = `Procesando ${i+1} / ${state.images.length}...`;
+      const item = state.images[i];
+      const off = renderFull(item);
+      const blob = await new Promise(res => off.toBlob(res, 'image/jpeg', 0.9));
+      const cleanName = item.name.replace(/\.[^.]+$/, '');
+      zip.file(`marca-${cleanName}.jpg`, blob);
+      await new Promise(r => setTimeout(r, 0)); // yield to UI
+    }
+    progressText.textContent = 'Comprimiendo...';
+    const content = await zip.generateAsync({type:'blob'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(content);
+    a.download = 'fotos-con-marca-de-agua.zip';
+    a.click();
+    progressText.textContent = '¡Listo! Descargado.';
+    downloadAllBtn.disabled = false;
+    setTimeout(() => progressText.textContent = '', 3500);
+  });
+
+  downloadAllSeparateBtn.addEventListener('click', async () => {
+    if(state.images.length === 0) return;
+    downloadAllSeparateBtn.disabled = true;
+    for(let i=0;i<state.images.length;i++){
+      progressText.textContent = `Descargando ${i+1} / ${state.images.length}...`;
+      const item = state.images[i];
+      const off = renderFull(item);
+      const blob = await new Promise(res => off.toBlob(res, 'image/jpeg', 0.9));
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'marca-' + item.name.replace(/\.[^.]+$/, '') + '.jpg';
+      a.click();
+      // pausa entre descargas: los navegadores suelen bloquear varias descargas seguidas
+      await new Promise(r => setTimeout(r, 400));
+    }
+    progressText.textContent = '¡Listo! Revisa tu carpeta de descargas.';
+    downloadAllSeparateBtn.disabled = false;
+    setTimeout(() => progressText.textContent = '', 4000);
+  });
+
+  // ---------- guardar / cargar configuración ----------
+  const saveConfigBtn = el('saveConfigBtn');
+  const loadConfigBtn = el('loadConfigBtn');
+  const configInput = el('configInput');
+  const configStatus = el('configStatus');
+
+  function currentConfig(){
+    return {
+      _tipo: 'sello-config',
+      _version: 1,
+      mode: state.mode,
+      text: state.text,
+      color: state.color,
+      fontSize: state.fontSize,
+      fontFamily: state.fontFamily,
+      logoScale: state.logoScale,
+      opacity: state.opacity,
+      rotation: state.rotation,
+      mosaic: state.mosaic,
+    };
+  }
+
+  saveConfigBtn.addEventListener('click', () => {
+    const cfg = currentConfig();
+    const blob = new Blob([JSON.stringify(cfg, null, 2)], {type:'application/json'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'config-marca-de-agua.json';
+    a.click();
+    configStatus.textContent = 'Configuración guardada ✓';
+    setTimeout(() => configStatus.textContent = '', 3000);
+  });
+
+  loadConfigBtn.addEventListener('click', () => configInput.click());
+  configInput.addEventListener('change', e => {
+    const file = e.target.files[0];
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      try{
+        const cfg = JSON.parse(ev.target.result);
+        applyConfig(cfg);
+        configStatus.textContent = 'Configuración cargada ✓';
+      }catch(err){
+        configStatus.textContent = 'Ese archivo no es una configuración válida.';
+      }
+      setTimeout(() => configStatus.textContent = '', 3500);
+    };
+    reader.readAsText(file);
+  });
+
+  function applyConfig(cfg){
+    if(cfg.mode) modeBtns[cfg.mode] && modeBtns[cfg.mode].click();
+    if(typeof cfg.text === 'string'){ state.text = cfg.text; el('wmText').value = cfg.text; }
+    if(cfg.color){
+      state.color = cfg.color;
+      el('wmColorPicker').value = cfg.color;
+      el('wmColorHex').value = cfg.color.toUpperCase();
+      el('colorVal').textContent = cfg.color.toUpperCase();
+    }
+    if(cfg.fontSize){ state.fontSize = cfg.fontSize; el('fontSize').value = cfg.fontSize; el('fontSizeVal').textContent = cfg.fontSize + 'px'; }
+    if(cfg.fontFamily){ state.fontFamily = cfg.fontFamily; el('fontFamily').value = cfg.fontFamily; }
+    if(cfg.logoScale){ state.logoScale = cfg.logoScale; el('logoScale').value = cfg.logoScale; el('logoScaleVal').textContent = cfg.logoScale + '%'; }
+    if(typeof cfg.opacity === 'number'){ state.opacity = cfg.opacity; el('opacity').value = cfg.opacity; el('opacityVal').textContent = cfg.opacity + '%'; }
+    if(typeof cfg.rotation === 'number'){ state.rotation = cfg.rotation; el('rotation').value = cfg.rotation; el('rotationVal').textContent = cfg.rotation + '°'; }
+    if(typeof cfg.mosaic === 'boolean'){
+      state.mosaic = cfg.mosaic;
+      el('mosaicToggle').checked = cfg.mosaic;
+      el('positionPanel').style.opacity = cfg.mosaic ? '0.4' : '1';
+      el('positionPanel').style.pointerEvents = cfg.mosaic ? 'none' : 'auto';
+    }
+    renderPreview();
+  }
+
+  // init
+  updateButtons();
+})();
+</script>
+</body>
+</html>
