@@ -535,6 +535,7 @@
   let draggingWhich = null; // 'logo' | 'text' | null
   let handleLogoEl = null, handleTextEl = null;
   let dragRAF = null;
+  let dragCanvasRect = null, dragWrapRect = null;
 
   function createHandlesOnce(){
     if(handleLogoEl && handleTextEl) return; // ya existen, no recrear (rompe el arrastre táctil)
@@ -558,17 +559,19 @@
     e.preventDefault();
     e.stopPropagation();
     draggingWhich = which;
+    dragCanvasRect = canvas.getBoundingClientRect();
+    dragWrapRect = canvasWrap.getBoundingClientRect();
   }
   window.addEventListener('mousemove', onDrag);
   window.addEventListener('touchmove', onDrag, {passive:false});
-  window.addEventListener('mouseup', () => draggingWhich = null);
-  window.addEventListener('touchend', () => draggingWhich = null);
-  window.addEventListener('touchcancel', () => draggingWhich = null);
+  window.addEventListener('mouseup', () => { draggingWhich = null; dragCanvasRect = null; dragWrapRect = null; });
+  window.addEventListener('touchend', () => { draggingWhich = null; dragCanvasRect = null; dragWrapRect = null; });
+  window.addEventListener('touchcancel', () => { draggingWhich = null; dragCanvasRect = null; dragWrapRect = null; });
 
   function onDrag(e){
     if(!draggingWhich || state.mosaic || state.activeIndex === -1) return;
     e.preventDefault();
-    const rect = canvas.getBoundingClientRect();
+    const rect = dragCanvasRect || canvas.getBoundingClientRect();
     const point = e.touches ? e.touches[0] : e;
     let x = (point.clientX - rect.left) / rect.width;
     let y = (point.clientY - rect.top) / rect.height;
@@ -627,6 +630,21 @@
     targetCtx.restore();
   }
 
+  // Cache de la foto ya escalada al tamaño de la vista previa — evita volver a
+  // procesar una foto de 12+ megapixeles en cada frame mientras se arrastra.
+  const baseLayerCanvas = document.createElement('canvas');
+  let baseLayerSrcImg = null;
+
+  function getBaseLayer(img, w, h){
+    if(baseLayerCanvas.width !== w || baseLayerCanvas.height !== h || baseLayerSrcImg !== img){
+      baseLayerCanvas.width = w;
+      baseLayerCanvas.height = h;
+      baseLayerCanvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      baseLayerSrcImg = img;
+    }
+    return baseLayerCanvas;
+  }
+
   function renderPreview(){
     updateButtons();
     if(state.activeIndex === -1 || !state.images[state.activeIndex]) return;
@@ -639,14 +657,17 @@
     canvas.width = w; canvas.height = h;
 
     const activeItem = state.images[state.activeIndex];
+    const base = getBaseLayer(img, w, h);
     ctx.clearRect(0,0,w,h);
-    ctx.drawImage(img, 0, 0, w, h);
+    ctx.drawImage(base, 0, 0); // copia liviana — ya no reescala la foto original
     drawWatermark(ctx, w, h, activeItem.posLogo, activeItem.posText);
 
     createHandlesOnce();
     if(!state.mosaic){
-      const rect = canvas.getBoundingClientRect();
-      const wrapRect = canvasWrap.getBoundingClientRect();
+      // Durante el arrastre reusamos el rect calculado al iniciar el gesto,
+      // para no forzar un recálculo de layout en cada frame (causaba los tirones).
+      const rect = draggingWhich ? dragCanvasRect : canvas.getBoundingClientRect();
+      const wrapRect = draggingWhich ? dragWrapRect : canvasWrap.getBoundingClientRect();
       const hSize = 84;
 
       const showLogo = state.mode === 'logo' || state.mode === 'both';
