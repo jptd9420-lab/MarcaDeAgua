@@ -259,6 +259,11 @@
           <input type="checkbox" id="mosaicToggle">
           <label style="margin:0;" for="mosaicToggle">Repetir en mosaico (cubre toda la foto — máxima protección anti-robo)</label>
         </div>
+
+        <div class="checkline">
+          <input type="checkbox" id="rememberOpacityRotation">
+          <label style="margin:0;" for="rememberOpacityRotation">Recordar esta opacidad y rotación la próxima vez</label>
+        </div>
       </div>
 
       <div class="panel" id="configPanel" style="margin-top:16px;">
@@ -490,16 +495,60 @@
   });
 
   // ---------- opacity / rotation / mosaic ----------
+  const OPACITY_ROTATION_KEY = 'sello_opacity_rotation';
+  const rememberOpRotCheckbox = el('rememberOpacityRotation');
+
+  function saveOpacityRotationIfRemembering(){
+    if(!rememberOpRotCheckbox.checked) return;
+    try{
+      localStorage.setItem(OPACITY_ROTATION_KEY, JSON.stringify({
+        opacity: state.opacity, rotation: state.rotation
+      }));
+    }catch(err){ /* almacenamiento no disponible, seguimos sin guardar */ }
+  }
+
   el('opacity').addEventListener('input', e => {
     state.opacity = +e.target.value;
     el('opacityVal').textContent = state.opacity + '%';
     renderPreview();
+    saveOpacityRotationIfRemembering();
   });
   el('rotation').addEventListener('input', e => {
     state.rotation = +e.target.value;
     el('rotationVal').textContent = state.rotation + '°';
     renderPreview();
+    saveOpacityRotationIfRemembering();
   });
+  rememberOpRotCheckbox.addEventListener('change', e => {
+    if(e.target.checked){
+      saveOpacityRotationIfRemembering();
+    } else {
+      try{ localStorage.removeItem(OPACITY_ROTATION_KEY); }catch(err){}
+    }
+  });
+
+  // Al abrir la herramienta: si había algo guardado, lo aplicamos y marcamos el check
+  (function loadSavedOpacityRotation(){
+    let saved = null;
+    try{ saved = localStorage.getItem(OPACITY_ROTATION_KEY); }catch(err){ saved = null; }
+    if(saved){
+      try{
+        const cfg = JSON.parse(saved);
+        if(typeof cfg.opacity === 'number'){
+          state.opacity = cfg.opacity;
+          el('opacity').value = cfg.opacity;
+          el('opacityVal').textContent = cfg.opacity + '%';
+        }
+        if(typeof cfg.rotation === 'number'){
+          state.rotation = cfg.rotation;
+          el('rotation').value = cfg.rotation;
+          el('rotationVal').textContent = cfg.rotation + '°';
+        }
+        rememberOpRotCheckbox.checked = true;
+      }catch(err){ /* dato corrupto, lo ignoramos */ }
+    }
+  })();
+
   el('mosaicToggle').addEventListener('change', e => {
     state.mosaic = e.target.checked;
     el('positionPanel').style.opacity = state.mosaic ? '0.4' : '1';
