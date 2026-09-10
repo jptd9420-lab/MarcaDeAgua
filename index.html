@@ -121,7 +121,7 @@
   #previewCanvas{max-width:100%;max-height:60vh;display:block;box-shadow:0 2px 20px rgba(0,0,0,.5);}
   .drag-handle{position:absolute;border:1.5px dashed var(--accent-bright);border-radius:4px;
     cursor:grab;background:rgba(232,189,118,0.08);align-items:center;justify-content:center;
-    display:none;z-index:4;}
+    display:none;z-index:4;touch-action:none;}
   .drag-handle:active{cursor:grabbing;}
   .drag-handle-logo{border-color:var(--accent-bright);background:rgba(232,189,118,0.10);}
   .drag-handle-text{border-color:var(--danger);background:rgba(255,43,43,0.08);}
@@ -534,15 +534,14 @@
   // ---------- drag handles over canvas (logo y texto, independientes) ----------
   let draggingWhich = null; // 'logo' | 'text' | null
   let handleLogoEl = null, handleTextEl = null;
+  let dragRAF = null;
 
-  function ensureHandles(){
-    if(handleLogoEl) handleLogoEl.remove();
-    if(handleTextEl) handleTextEl.remove();
+  function createHandlesOnce(){
+    if(handleLogoEl && handleTextEl) return; // ya existen, no recrear (rompe el arrastre táctil)
 
     handleLogoEl = document.createElement('div');
     handleLogoEl.className = 'drag-handle drag-handle-logo';
     handleLogoEl.title = 'Arrastra para mover el logo';
-    handleLogoEl.innerHTML = '';
     canvasWrap.appendChild(handleLogoEl);
     handleLogoEl.addEventListener('mousedown', e => startDrag(e,'logo'));
     handleLogoEl.addEventListener('touchstart', e => startDrag(e,'logo'), {passive:false});
@@ -550,7 +549,6 @@
     handleTextEl = document.createElement('div');
     handleTextEl.className = 'drag-handle drag-handle-text';
     handleTextEl.title = 'Arrastra para mover el texto';
-    handleTextEl.innerHTML = '';
     canvasWrap.appendChild(handleTextEl);
     handleTextEl.addEventListener('mousedown', e => startDrag(e,'text'));
     handleTextEl.addEventListener('touchstart', e => startDrag(e,'text'), {passive:false});
@@ -565,6 +563,7 @@
   window.addEventListener('touchmove', onDrag, {passive:false});
   window.addEventListener('mouseup', () => draggingWhich = null);
   window.addEventListener('touchend', () => draggingWhich = null);
+  window.addEventListener('touchcancel', () => draggingWhich = null);
 
   function onDrag(e){
     if(!draggingWhich || state.mosaic || state.activeIndex === -1) return;
@@ -577,7 +576,9 @@
     y = Math.min(1, Math.max(0, y));
     const key = draggingWhich === 'text' ? 'posText' : 'posLogo';
     state.images[state.activeIndex][key] = { x, y };
-    renderPreview();
+    // usamos requestAnimationFrame para que el dedo no vaya más rápido que el redibujado
+    if(dragRAF) cancelAnimationFrame(dragRAF);
+    dragRAF = requestAnimationFrame(() => { renderPreview(); dragRAF = null; });
   }
 
   // ---------- core drawing ----------
@@ -642,11 +643,11 @@
     ctx.drawImage(img, 0, 0, w, h);
     drawWatermark(ctx, w, h, activeItem.posLogo, activeItem.posText);
 
-    ensureHandles();
+    createHandlesOnce();
     if(!state.mosaic){
       const rect = canvas.getBoundingClientRect();
       const wrapRect = canvasWrap.getBoundingClientRect();
-      const hSize = 64;
+      const hSize = 84;
 
       const showLogo = state.mode === 'logo' || state.mode === 'both';
       const showText = state.mode === 'text' || state.mode === 'both';
