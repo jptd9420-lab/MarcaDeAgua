@@ -142,6 +142,8 @@
   button.ghost{background:transparent;color:var(--ink);border:1px solid var(--border);
     padding:12px 16px;border-radius:7px;font-size:13px;font-weight:600;cursor:pointer;}
   button.ghost:hover{border-color:var(--accent);color:var(--accent-bright);}
+  button.ghost:disabled{opacity:.35;cursor:not-allowed;border-color:var(--border);color:var(--muted);}
+  button.ghost:disabled:hover{border-color:var(--border);color:var(--muted);}
   .progress{font-size:12.5px;color:var(--muted);align-self:center;}
 </style>
 </head>
@@ -270,9 +272,9 @@
       </div>
 
       <div class="actions">
-        <button class="primary" id="downloadAllBtn" disabled>Aplicar a todas y descargar .zip</button>
-        <button class="ghost" id="downloadAllSeparateBtn" disabled>Descargar todas (sin comprimir)</button>
+        <button class="primary" id="downloadAllSeparateBtn" disabled>Descargar todas (sin comprimir)</button>
         <button class="ghost" id="downloadOneBtn" disabled>Descargar solo esta foto</button>
+        <button class="ghost" id="downloadAllBtn" disabled>Aplicar a todas y descargar .zip</button>
         <span class="progress" id="progressText"></span>
       </div>
 
@@ -281,21 +283,9 @@
         <label>Opacidad <span class="val" id="opacityVal">85%</span></label>
         <input type="range" id="opacity" min="30" max="100" step="1" value="85">
 
-        <label>Rotación <span class="val" id="rotationVal">0°</span></label>
-        <input type="range" id="rotation" min="-45" max="45" value="0">
-
         <div class="checkline">
           <input type="checkbox" id="mosaicToggle">
           <label style="margin:0;" for="mosaicToggle">Repetir en mosaico (cubre toda la foto — máxima protección anti-robo)</label>
-        </div>
-
-        <div class="checkline">
-          <input type="checkbox" id="rememberOpacityRotation">
-          <label style="margin:0;" for="rememberOpacityRotation">Recordar esta configuración la próxima vez
-            <span style="display:block;font-weight:400;color:var(--muted);font-size:11px;margin-top:2px;">
-              Guarda también el texto, color, tipografía y tamaño de logo (eso hoy no se recuerda solo).
-            </span>
-          </label>
         </div>
       </div>
 
@@ -318,7 +308,6 @@
     logoImg: null,
     logoScale: 30,    // % of image width
     opacity: 85,
-    rotation: 0,
     mosaic: false,
     defaultLogoPos: { x: 0.82, y: 0.82 },
     defaultTextPos: { x: 0.82, y: 0.94 },
@@ -520,10 +509,7 @@
 
   // ---------- recordar configuración completa (checkbox en pestaña 3) ----------
   const FULL_CONFIG_KEY = 'sello_saved_config';
-  const rememberOpRotCheckbox = el('rememberOpacityRotation');
-
   function saveFullConfigIfRemembering(){
-    if(!rememberOpRotCheckbox.checked) return;
     try{
       localStorage.setItem(FULL_CONFIG_KEY, JSON.stringify(currentConfig()));
     }catch(err){ /* almacenamiento no disponible, seguimos sin guardar */ }
@@ -535,21 +521,8 @@
     renderPreview();
     saveFullConfigIfRemembering();
   });
-  el('rotation').addEventListener('input', e => {
-    state.rotation = +e.target.value;
-    el('rotationVal').textContent = state.rotation + '°';
-    renderPreview();
-    saveFullConfigIfRemembering();
-  });
-  rememberOpRotCheckbox.addEventListener('change', e => {
-    if(e.target.checked){
-      saveFullConfigIfRemembering();
-    } else {
-      try{ localStorage.removeItem(FULL_CONFIG_KEY); }catch(err){}
-    }
-  });
 
-  // Al abrir la herramienta: si había algo guardado, lo aplicamos y marcamos el check
+  // Al abrir la herramienta: si había algo guardado, lo aplicamos automáticamente
   (function loadSavedFullConfig(){
     let saved = null;
     try{ saved = localStorage.getItem(FULL_CONFIG_KEY); }catch(err){ saved = null; }
@@ -557,7 +530,6 @@
       try{
         const cfg = JSON.parse(saved);
         applyConfig(cfg);
-        rememberOpRotCheckbox.checked = true;
       }catch(err){ /* dato corrupto, lo ignoramos */ }
     }
   })();
@@ -728,7 +700,6 @@
       if(!state.logoImg) return;
       targetCtx.save();
       targetCtx.translate(cx, cy);
-      targetCtx.rotate(state.rotation * Math.PI / 180);
       const targetW = cw * (state.logoScale/100);
       const ratio = state.logoImg.height / state.logoImg.width;
       const targetH = targetW * ratio;
@@ -739,7 +710,6 @@
     const drawTextAt = (cx, cy) => {
       targetCtx.save();
       targetCtx.translate(cx, cy);
-      targetCtx.rotate(state.rotation * Math.PI / 180);
       targetCtx.font = `700 ${fontPx}px ${state.fontFamily}`;
       targetCtx.fillStyle = state.color;
       targetCtx.textAlign = 'center';
@@ -986,7 +956,6 @@
       fontFamily: state.fontFamily,
       logoScale: state.logoScale,
       opacity: state.opacity,
-      rotation: state.rotation,
       mosaic: state.mosaic,
     };
   }
@@ -1008,7 +977,6 @@
     } else if(typeof cfg.logoOpacity === 'number'){ // config guardada cuando estaban separadas: usamos la del logo
       state.opacity = cfg.logoOpacity; el('opacity').value = cfg.logoOpacity; el('opacityVal').textContent = cfg.logoOpacity + '%';
     }
-    if(typeof cfg.rotation === 'number'){ state.rotation = cfg.rotation; el('rotation').value = cfg.rotation; el('rotationVal').textContent = cfg.rotation + '°'; }
     if(typeof cfg.mosaic === 'boolean'){
       state.mosaic = cfg.mosaic;
       el('mosaicToggle').checked = cfg.mosaic;
