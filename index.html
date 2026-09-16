@@ -263,42 +263,6 @@
         </button>
       </div>
 
-      <div class="panel">
-        <h2>6. Recortar foto</h2>
-        <p style="color:var(--muted);font-size:11.5px;margin:0 0 10px;">
-          Se ajusta <b style="color:var(--accent-bright);">por cada foto</b>. Ajusta el recorte
-          antes de mover el logo/texto para mejores resultados.
-        </p>
-
-        <button type="button" class="primary" id="startCropBtn" style="width:100%;">
-          ✂️ Recortar esta foto
-        </button>
-
-        <div id="cropEditingControls" style="display:none;">
-          <label style="margin-top:12px;">Proporción</label>
-          <div class="grid-aspect" id="aspectButtons" style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:6px;">
-            <button type="button" class="ghost aspect-btn active" data-aspect="free" style="padding:8px 4px;font-size:11.5px;">Libre</button>
-            <button type="button" class="ghost aspect-btn" data-aspect="1" style="padding:8px 4px;font-size:11.5px;">1:1</button>
-            <button type="button" class="ghost aspect-btn" data-aspect="0.8" style="padding:8px 4px;font-size:11.5px;">4:5</button>
-            <button type="button" class="ghost aspect-btn" data-aspect="1.7778" style="padding:8px 4px;font-size:11.5px;">16:9</button>
-            <button type="button" class="ghost aspect-btn" data-aspect="0.5625" style="padding:8px 4px;font-size:11.5px;">9:16</button>
-            <button type="button" class="ghost aspect-btn" data-aspect="0.75" style="padding:8px 4px;font-size:11.5px;">3:4</button>
-          </div>
-
-          <div class="actions" style="margin-top:14px;">
-            <button type="button" class="primary" id="applyCropBtn" style="flex:1;">Aplicar recorte</button>
-            <button type="button" class="ghost" id="cancelCropBtn" style="flex:1;">Cancelar</button>
-          </div>
-        </div>
-
-        <div id="cropAppliedControls" style="display:none;">
-          <div class="actions" style="margin-top:10px;">
-            <button type="button" class="ghost" id="editCropBtn" style="flex:1;">Editar recorte</button>
-            <button type="button" class="ghost" id="removeCropBtn" style="flex:1;">Quitar recorte</button>
-          </div>
-        </div>
-      </div>
-
     </div>
 
     <!-- PREVIEW -->
@@ -335,6 +299,42 @@
         <div class="checkline">
           <input type="checkbox" id="mosaicToggle">
           <label style="margin:0;" for="mosaicToggle">Repetir en mosaico (cubre toda la foto — máxima protección anti-robo)</label>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-top:16px;">
+        <h2>6. Recortar foto</h2>
+        <p style="color:var(--muted);font-size:11.5px;margin:0 0 10px;">
+          Se ajusta <b style="color:var(--accent-bright);">por cada foto</b>. Ajusta el recorte
+          antes de mover el logo/texto para mejores resultados.
+        </p>
+
+        <button type="button" class="primary" id="startCropBtn" style="width:100%;">
+          ✂️ Recortar esta foto
+        </button>
+
+        <div id="cropEditingControls" style="display:none;">
+          <label style="margin-top:12px;">Proporción</label>
+          <div class="grid-aspect" id="aspectButtons" style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:6px;">
+            <button type="button" class="ghost aspect-btn active" data-aspect="free" style="padding:8px 4px;font-size:11.5px;">Libre</button>
+            <button type="button" class="ghost aspect-btn" data-aspect="1" style="padding:8px 4px;font-size:11.5px;">1:1</button>
+            <button type="button" class="ghost aspect-btn" data-aspect="0.8" style="padding:8px 4px;font-size:11.5px;">4:5</button>
+            <button type="button" class="ghost aspect-btn" data-aspect="1.7778" style="padding:8px 4px;font-size:11.5px;">16:9</button>
+            <button type="button" class="ghost aspect-btn" data-aspect="0.5625" style="padding:8px 4px;font-size:11.5px;">9:16</button>
+            <button type="button" class="ghost aspect-btn" data-aspect="0.75" style="padding:8px 4px;font-size:11.5px;">3:4</button>
+          </div>
+
+          <div class="actions" style="margin-top:14px;">
+            <button type="button" class="primary" id="applyCropBtn" style="flex:1;">Aplicar recorte</button>
+            <button type="button" class="ghost" id="cancelCropBtn" style="flex:1;">Cancelar</button>
+          </div>
+        </div>
+
+        <div id="cropAppliedControls" style="display:none;">
+          <div class="actions" style="margin-top:10px;">
+            <button type="button" class="ghost" id="editCropBtn" style="flex:1;">Editar recorte</button>
+            <button type="button" class="ghost" id="removeCropBtn" style="flex:1;">Quitar recorte</button>
+          </div>
         </div>
       </div>
 
