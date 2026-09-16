@@ -125,6 +125,19 @@
   .drag-handle:active{cursor:grabbing;}
   .drag-handle-logo{border-color:var(--accent-bright);background:rgba(232,189,118,0.10);}
   .drag-handle-text{border-color:var(--danger);background:rgba(255,43,43,0.08);}
+
+  .aspect-btn.active{background:#1a1305;color:var(--accent-bright);border-color:var(--accent);}
+
+  .crop-box{position:absolute;border:1.5px solid var(--accent-bright);
+    box-shadow:0 0 0 9999px rgba(8,11,13,0.62);
+    display:none;touch-action:none;cursor:move;z-index:6;}
+  .crop-handle{position:absolute;width:22px;height:22px;margin:-11px;
+    background:var(--accent-bright);border:2px solid var(--ink);border-radius:50%;
+    touch-action:none;z-index:7;}
+  .crop-handle.nw{left:0;top:0;cursor:nwse-resize;}
+  .crop-handle.ne{right:0;top:0;left:auto;cursor:nesw-resize;}
+  .crop-handle.sw{left:0;bottom:0;top:auto;cursor:nesw-resize;}
+  .crop-handle.se{right:0;bottom:0;left:auto;top:auto;cursor:nwse-resize;}
   .handle-label{font-size:9.5px;font-weight:700;letter-spacing:.06em;color:var(--ink);
     background:rgba(15,21,25,.85);padding:2px 6px;border-radius:3px;pointer-events:none;
     text-transform:uppercase;white-space:nowrap;}
@@ -250,6 +263,42 @@
         </button>
       </div>
 
+      <div class="panel">
+        <h2>6. Recortar foto</h2>
+        <p style="color:var(--muted);font-size:11.5px;margin:0 0 10px;">
+          Se ajusta <b style="color:var(--accent-bright);">por cada foto</b>. Ajusta el recorte
+          antes de mover el logo/texto para mejores resultados.
+        </p>
+
+        <button type="button" class="primary" id="startCropBtn" style="width:100%;">
+          ✂️ Recortar esta foto
+        </button>
+
+        <div id="cropEditingControls" style="display:none;">
+          <label style="margin-top:12px;">Proporción</label>
+          <div class="grid-aspect" id="aspectButtons" style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:6px;">
+            <button type="button" class="ghost aspect-btn active" data-aspect="free" style="padding:8px 4px;font-size:11.5px;">Libre</button>
+            <button type="button" class="ghost aspect-btn" data-aspect="1" style="padding:8px 4px;font-size:11.5px;">1:1</button>
+            <button type="button" class="ghost aspect-btn" data-aspect="0.8" style="padding:8px 4px;font-size:11.5px;">4:5</button>
+            <button type="button" class="ghost aspect-btn" data-aspect="1.7778" style="padding:8px 4px;font-size:11.5px;">16:9</button>
+            <button type="button" class="ghost aspect-btn" data-aspect="0.5625" style="padding:8px 4px;font-size:11.5px;">9:16</button>
+            <button type="button" class="ghost aspect-btn" data-aspect="0.75" style="padding:8px 4px;font-size:11.5px;">3:4</button>
+          </div>
+
+          <div class="actions" style="margin-top:14px;">
+            <button type="button" class="primary" id="applyCropBtn" style="flex:1;">Aplicar recorte</button>
+            <button type="button" class="ghost" id="cancelCropBtn" style="flex:1;">Cancelar</button>
+          </div>
+        </div>
+
+        <div id="cropAppliedControls" style="display:none;">
+          <div class="actions" style="margin-top:10px;">
+            <button type="button" class="ghost" id="editCropBtn" style="flex:1;">Editar recorte</button>
+            <button type="button" class="ghost" id="removeCropBtn" style="flex:1;">Quitar recorte</button>
+          </div>
+        </div>
+      </div>
+
     </div>
 
     <!-- PREVIEW -->
@@ -312,6 +361,9 @@
     defaultLogoPos: { x: 0.82, y: 0.82 },
     defaultTextPos: { x: 0.82, y: 0.94 },
     dragTarget: 'logo', // qué se mueve al arrastrar / usar el grid9 cuando el modo es 'both'
+    cropMode: false,          // si estamos editando el recorte de la foto activa ahora mismo
+    cropBox: { x:0, y:0, w:1, h:1 }, // recorte que se está editando (fracciones 0..1)
+    cropAspect: null,         // null = libre, o un número (ancho/alto) si hay proporción fija
   };
 
   // ---------- elements ----------
@@ -350,7 +402,8 @@
             posText: { ...state.defaultTextPos },
             rotation: 0,
             brightness: 100,
-            sharpness: 0});
+            sharpness: 0,
+            crop: null});
           if(state.activeIndex === -1) state.activeIndex = 0;
           renderThumbs();
           renderPreview();
@@ -368,12 +421,13 @@
       const div = document.createElement('div');
       div.className = 'thumb' + (i === state.activeIndex ? ' active' : '');
       div.innerHTML = `<img src="${item.img.src}"><span class="x">✕</span>`;
-      div.querySelector('img').addEventListener('click', () => { state.activeIndex = i; renderThumbs(); syncEnhanceUIToActiveImage(); renderPreview(); });
+      div.querySelector('img').addEventListener('click', () => { state.activeIndex = i; state.cropMode = false; renderThumbs(); syncEnhanceUIToActiveImage(); updateCropPanelButtons(); renderPreview(); });
       div.querySelector('.x').addEventListener('click', (ev) => {
         ev.stopPropagation();
         state.images.splice(i,1);
         if(state.activeIndex >= state.images.length) state.activeIndex = state.images.length - 1;
-        renderThumbs(); syncEnhanceUIToActiveImage(); renderPreview(); updateButtons();
+        state.cropMode = false;
+        renderThumbs(); syncEnhanceUIToActiveImage(); updateCropPanelButtons(); renderPreview(); updateButtons();
       });
       thumbs.appendChild(div);
     });
@@ -814,18 +868,41 @@
     const rotation = activeItem.rotation || 0;
 
     const maxW = 760, maxH = 560;
-    const natural = getRotatedDims(img, rotation);
-    const scale = Math.min(maxW/natural.w, maxH/natural.h, 1);
-    const w = Math.round(natural.w*scale), h = Math.round(natural.h*scale);
+    const naturalFull = getRotatedDims(img, rotation); // dimensiones de la foto orientada, sin recortar
+
+    // Capa base: la foto completa (sin recortar) ya orientada/mejorada, escalada para la vista previa
+    const fullScale = Math.min(maxW/naturalFull.w, maxH/naturalFull.h, 1);
+    const fullPreviewW = Math.max(1, Math.round(naturalFull.w*fullScale));
+    const fullPreviewH = Math.max(1, Math.round(naturalFull.h*fullScale));
+    const base = getBaseLayer(img, fullPreviewW, fullPreviewH, rotation, activeItem.brightness, activeItem.sharpness);
+
+    // Si hay un recorte aplicado (y no estamos editándolo ahora mismo), mostramos solo esa porción
+    let srcX = 0, srcY = 0, srcW = fullPreviewW, srcH = fullPreviewH;
+    let effW = naturalFull.w, effH = naturalFull.h;
+    if(activeItem.crop && !state.cropMode){
+      const c = activeItem.crop;
+      srcX = c.x * fullPreviewW; srcY = c.y * fullPreviewH;
+      srcW = Math.max(1, c.w * fullPreviewW); srcH = Math.max(1, c.h * fullPreviewH);
+      effW = naturalFull.w * c.w; effH = naturalFull.h * c.h;
+    }
+
+    const scale2 = Math.min(maxW/effW, maxH/effH, 1);
+    const w = Math.max(1, Math.round(effW*scale2)), h = Math.max(1, Math.round(effH*scale2));
     canvas.width = w; canvas.height = h;
 
-    const base = getBaseLayer(img, w, h, rotation, activeItem.brightness, activeItem.sharpness);
     ctx.clearRect(0,0,w,h);
-    ctx.drawImage(base, 0, 0); // copia liviana — ya no reescala/rota la foto original
+    ctx.drawImage(base, srcX, srcY, srcW, srcH, 0, 0, w, h);
     drawWatermark(ctx, w, h, activeItem.posLogo, activeItem.posText);
 
     createHandlesOnce();
-    if(!state.mosaic){
+    createCropHandlesOnce();
+
+    if(state.cropMode){
+      handleLogoEl.style.display = 'none';
+      handleTextEl.style.display = 'none';
+      updateCropBoxOverlayPosition();
+    } else if(!state.mosaic){
+      cropBoxEl.style.display = 'none';
       // Durante el arrastre reusamos el rect calculado al iniciar el gesto,
       // para no forzar un recálculo de layout en cada frame (causaba los tirones).
       const rect = draggingWhich ? dragCanvasRect : canvas.getBoundingClientRect();
@@ -853,9 +930,10 @@
     } else {
       handleLogoEl.style.display = 'none';
       handleTextEl.style.display = 'none';
+      cropBoxEl.style.display = 'none';
     }
 
-    stageHint.textContent = `${activeItem.name} — ${natural.w}×${natural.h}px`;
+    stageHint.textContent = `${activeItem.name} — ${naturalFull.w}×${naturalFull.h}px`;
   }
 
   window.addEventListener('resize', renderPreview);
@@ -874,6 +952,195 @@
     renderPreview();
   });
 
+  // ---------- recortar foto ----------
+  let cropBoxEl = null, cropHandleEls = {};
+  let cropDragMode = null; // null | 'move' | 'nw' | 'ne' | 'sw' | 'se'
+  let cropDragStart = null;
+  let cropDragCanvasRect = null, cropDragWrapRect = null;
+  let cropRAF = null;
+  const CROP_MIN_SIZE = 0.06;
+
+  function createCropHandlesOnce(){
+    if(cropBoxEl) return;
+    cropBoxEl = document.createElement('div');
+    cropBoxEl.className = 'crop-box';
+    canvasWrap.appendChild(cropBoxEl);
+    cropBoxEl.addEventListener('mousedown', e => startCropDrag(e, 'move'));
+    cropBoxEl.addEventListener('touchstart', e => startCropDrag(e, 'move'), {passive:false});
+
+    ['nw','ne','sw','se'].forEach(corner => {
+      const h = document.createElement('div');
+      h.className = 'crop-handle ' + corner;
+      cropBoxEl.appendChild(h);
+      cropHandleEls[corner] = h;
+      h.addEventListener('mousedown', e => startCropDrag(e, corner));
+      h.addEventListener('touchstart', e => startCropDrag(e, corner), {passive:false});
+    });
+  }
+
+  function updateCropBoxOverlayPosition(){
+    if(!cropBoxEl) return;
+    if(!state.cropMode){ cropBoxEl.style.display = 'none'; return; }
+    cropBoxEl.style.display = 'block';
+    const rect = cropDragCanvasRect || canvas.getBoundingClientRect();
+    const wrapRect = cropDragWrapRect || canvasWrap.getBoundingClientRect();
+    const b = state.cropBox;
+    cropBoxEl.style.left = (rect.left - wrapRect.left + rect.width*b.x) + 'px';
+    cropBoxEl.style.top = (rect.top - wrapRect.top + rect.height*b.y) + 'px';
+    cropBoxEl.style.width = (rect.width*b.w) + 'px';
+    cropBoxEl.style.height = (rect.height*b.h) + 'px';
+  }
+
+  function startCropDrag(e, mode){
+    if(state.activeIndex === -1) return;
+    e.preventDefault();
+    e.stopPropagation();
+    cropDragMode = mode;
+    cropDragCanvasRect = canvas.getBoundingClientRect();
+    cropDragWrapRect = canvasWrap.getBoundingClientRect();
+    const point = e.touches ? e.touches[0] : e;
+    cropDragStart = {
+      mouseX: point.clientX, mouseY: point.clientY,
+      box: { ...state.cropBox }
+    };
+  }
+
+  window.addEventListener('mousemove', onCropDrag);
+  window.addEventListener('touchmove', onCropDrag, {passive:false});
+  window.addEventListener('mouseup', endCropDrag);
+  window.addEventListener('touchend', endCropDrag);
+  window.addEventListener('touchcancel', endCropDrag);
+
+  function endCropDrag(){
+    cropDragMode = null;
+    cropDragStart = null;
+    cropDragCanvasRect = null;
+    cropDragWrapRect = null;
+  }
+
+  function onCropDrag(e){
+    if(!cropDragMode || !cropDragStart) return;
+    e.preventDefault();
+    const rect = cropDragCanvasRect;
+    const point = e.touches ? e.touches[0] : e;
+    const px = Math.min(1, Math.max(0, (point.clientX - rect.left) / rect.width));
+    const py = Math.min(1, Math.max(0, (point.clientY - rect.top) / rect.height));
+
+    if(cropDragMode === 'move'){
+      const dx = (point.clientX - cropDragStart.mouseX) / rect.width;
+      const dy = (point.clientY - cropDragStart.mouseY) / rect.height;
+      const b0 = cropDragStart.box;
+      const newX = Math.min(1 - b0.w, Math.max(0, b0.x + dx));
+      const newY = Math.min(1 - b0.h, Math.max(0, b0.y + dy));
+      state.cropBox = { x: newX, y: newY, w: b0.w, h: b0.h };
+    } else {
+      // resize desde una esquina: el punto opuesto queda fijo
+      const b0 = cropDragStart.box;
+      const anchor = {
+        nw: { x: b0.x + b0.w, y: b0.y + b0.h },
+        ne: { x: b0.x,        y: b0.y + b0.h },
+        sw: { x: b0.x + b0.w, y: b0.y        },
+        se: { x: b0.x,        y: b0.y        },
+      }[cropDragMode];
+
+      let newW = Math.abs(px - anchor.x);
+      let newH = Math.abs(py - anchor.y);
+      newW = Math.max(CROP_MIN_SIZE, newW);
+      newH = Math.max(CROP_MIN_SIZE, newH);
+
+      if(state.cropAspect && state.activeIndex !== -1){
+        const item = state.images[state.activeIndex];
+        const natural = getRotatedDims(item.img, item.rotation || 0);
+        newH = (newW*natural.w) / (state.cropAspect*natural.h);
+        if(newH < CROP_MIN_SIZE){ newH = CROP_MIN_SIZE; newW = (newH*state.cropAspect*natural.h)/natural.w; }
+      }
+
+      const dirX = (px >= anchor.x) ? 1 : -1;
+      const dirY = (py >= anchor.y) ? 1 : -1;
+      let cornerX = anchor.x + dirX*newW;
+      let cornerY = anchor.y + dirY*newH;
+      cornerX = Math.min(1, Math.max(0, cornerX));
+      cornerY = Math.min(1, Math.max(0, cornerY));
+      newW = Math.abs(cornerX - anchor.x);
+      newH = Math.abs(cornerY - anchor.y);
+
+      state.cropBox = {
+        x: Math.min(anchor.x, cornerX),
+        y: Math.min(anchor.y, cornerY),
+        w: Math.max(CROP_MIN_SIZE, newW),
+        h: Math.max(CROP_MIN_SIZE, newH),
+      };
+    }
+
+    if(cropRAF) cancelAnimationFrame(cropRAF);
+    cropRAF = requestAnimationFrame(() => { updateCropBoxOverlayPosition(); cropRAF = null; });
+  }
+
+  function updateCropPanelButtons(){
+    if(state.activeIndex === -1) return;
+    const item = state.images[state.activeIndex];
+    el('startCropBtn').style.display = (state.cropMode || item.crop) ? 'none' : 'block';
+    el('cropEditingControls').style.display = state.cropMode ? 'block' : 'none';
+    el('cropAppliedControls').style.display = (!state.cropMode && item.crop) ? 'block' : 'none';
+  }
+
+  function enterCropMode(){
+    if(state.activeIndex === -1) return;
+    const item = state.images[state.activeIndex];
+    state.cropBox = item.crop ? { ...item.crop } : { x:0, y:0, w:1, h:1 };
+    state.cropAspect = null;
+    state.cropMode = true;
+    document.querySelectorAll('.aspect-btn').forEach(b => b.classList.toggle('active', b.dataset.aspect === 'free'));
+    updateCropPanelButtons();
+    renderPreview();
+  }
+
+  el('startCropBtn').addEventListener('click', enterCropMode);
+  el('editCropBtn').addEventListener('click', enterCropMode);
+
+  el('applyCropBtn').addEventListener('click', () => {
+    if(state.activeIndex === -1) return;
+    state.images[state.activeIndex].crop = { ...state.cropBox };
+    state.cropMode = false;
+    updateCropPanelButtons();
+    renderPreview();
+  });
+
+  el('cancelCropBtn').addEventListener('click', () => {
+    state.cropMode = false;
+    updateCropPanelButtons();
+    renderPreview();
+  });
+
+  el('removeCropBtn').addEventListener('click', () => {
+    if(state.activeIndex === -1) return;
+    state.images[state.activeIndex].crop = null;
+    updateCropPanelButtons();
+    renderPreview();
+  });
+
+  document.querySelectorAll('.aspect-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.aspect-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const val = btn.dataset.aspect;
+      if(val === 'free'){
+        state.cropAspect = null;
+      } else if(state.activeIndex !== -1){
+        state.cropAspect = parseFloat(val);
+        const item = state.images[state.activeIndex];
+        const natural = getRotatedDims(item.img, item.rotation || 0);
+        const ratio = state.cropAspect;
+        let boxW, boxH;
+        if(ratio >= natural.w/natural.h){ boxW = natural.w; boxH = natural.w/ratio; }
+        else { boxH = natural.h; boxW = natural.h*ratio; }
+        const wFrac = boxW/natural.w, hFrac = boxH/natural.h;
+        state.cropBox = { x:(1-wFrac)/2, y:(1-hFrac)/2, w:wFrac, h:hFrac };
+      }
+      updateCropBoxOverlayPosition();
+    });
+  });
+
   // ---------- export helpers ----------
   function renderFull(imgItem){
     const rotation = imgItem.rotation || 0;
@@ -884,8 +1151,21 @@
     const octx = off.getContext('2d');
     drawRotatedInto(octx, imgItem.img, natural.w, natural.h, rotation, imgItem.brightness);
     applySharpen(octx, natural.w, natural.h, imgItem.sharpness);
-    drawWatermark(octx, off.width, off.height, imgItem.posLogo, imgItem.posText);
-    return off;
+
+    let finalCanvas = off;
+    if(imgItem.crop){
+      const c = imgItem.crop;
+      const sx = Math.round(c.x*natural.w), sy = Math.round(c.y*natural.h);
+      const sw = Math.max(1, Math.round(c.w*natural.w)), sh = Math.max(1, Math.round(c.h*natural.h));
+      const cropped = document.createElement('canvas');
+      cropped.width = sw; cropped.height = sh;
+      cropped.getContext('2d').drawImage(off, sx, sy, sw, sh, 0, 0, sw, sh);
+      finalCanvas = cropped;
+    }
+
+    const fctx = finalCanvas.getContext('2d');
+    drawWatermark(fctx, finalCanvas.width, finalCanvas.height, imgItem.posLogo, imgItem.posText);
+    return finalCanvas;
   }
 
   downloadOneBtn.addEventListener('click', () => {
